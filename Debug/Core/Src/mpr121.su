@@ -1,0 +1,5 @@
+../Core/Src/mpr121.c:15:5:mpr121_init	24	static
+../Core/Src/mpr121.c:51:5:mpr121_set_thresholds	24	static
+../Core/Src/mpr121.c:62:5:mpr121_read	40	static
+../Core/Src/mpr121.c:67:5:mpr121_write	48	static
+../Core/Src/mpr121.c:73:10:mpr121_read_touch_status	24	static
