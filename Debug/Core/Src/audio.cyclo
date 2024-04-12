@@ -1,0 +1,7 @@
+../Core/Src/audio.c:28:6:fill_freqs	2
+../Core/Src/audio.c:39:6:fill_sin_lut	2
+../Core/Src/audio.c:53:6:add_note	2
+../Core/Src/audio.c:67:6:update_amps	5
+../Core/Src/audio.c:85:6:init_audio_ctx	1
+../Core/Src/audio.c:92:6:audio_tim_isr	2
+../Core/Src/audio.c:105:6:init_timer	1
