@@ -18,9 +18,12 @@ int mpr121_write(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size);
  * Returns ~0 on failure;
  */
 uint16_t mpr121_read_touch_status(uint8_t addr);
+uint16_t mpr121_read_touch_status_nb(uint8_t addr);
 
 /*
  * Sets the touch and release thresholds for all electrodes in an MPR121.
  * Returns 0 on success and -1 on failure.
  */
 int mpr121_set_thresholds(uint8_t addr, uint8_t touch, uint8_t release);
+
+int mpr121_read_nb(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size);
