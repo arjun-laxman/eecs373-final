@@ -4,22 +4,22 @@
 #include "stm32l4xx_hal.h"
 #include "audio.h"
 
-#define WAVE_SAMPLES 100
-#define INIT_AMP 10
-#define DEAD_THRESHOLD 1
+#define WAVE_SAMPLES 256
+#define INIT_AMP 1
+#define DEAD_THRESHOLD 0.001
 #define NUM_HARM 4
 #define PRESCALER 1
-#define BASE_CLK 4000000
+#define BASE_CLK 120000000
 
 #define PI 3.14159265
-#define HIGH_DAMP_FACTOR 1
+#define HIGH_DAMP_FACTOR 0.8
 #define LOW_DAMP_FACTOR 1
 
 
 static float freqs[48];
 static audio_ctx_t ctx;
 static uint16_t sin_lut[WAVE_SAMPLES];
-static const float harmonic_amps[NUM_HARM] = {0.75, 0.5, 0.25, 0.1};
+static const float harmonic_amps[NUM_HARM] = {1, 0.2, 0.1};
 static int intr_freq;
 
 extern DAC_HandleTypeDef hdac1;
@@ -41,12 +41,9 @@ void fill_sin_lut()
 	// creates a sine wave look up table centered at VREF/2
 	for(uint16_t i = 0; i < WAVE_SAMPLES; ++i) {
 		sin_lut[i] = 0;
-		sin_lut[i] = (uint16_t) ( (sin( ((double) i)*360.0 / ((double) WAVE_SAMPLES)  * PI/180.0) * 2047) + 2048.0);
-		/*
 		for (int j = 0; j < NUM_HARM; j++) {
-			sin_lut[i] += (uint16_t)((double)(sin(2 * PI/180.0 * ((double) j + 1)/WAVE_SAMPLES) * harmonic_amps[j]) + 1) * 2047;
+			sin_lut[i] = (uint16_t) (sin((double) 2 * PI * i * (j+1) / WAVE_SAMPLES) * 2047 + 2048);
 		}
-		*/
 	}
 }
 
@@ -57,7 +54,7 @@ void add_note(int note_idx)
 		return;
 	}
 	ctx.notes[ctx.num_notes] = note_idx;
-	ctx.amps[ctx.num_notes] = 0.69;
+	ctx.amps[ctx.num_notes] = INIT_AMP;
 	ctx.cycles[ctx.num_notes] = 0;
 	ctx.cycles_per_wave[ctx.num_notes] = intr_freq / (int) freqs[note_idx];
 
@@ -98,7 +95,8 @@ void audio_tim_isr()
 		index = ctx.cycles[i] * WAVE_SAMPLES / ctx.cycles_per_wave[i];
 		dac_out += ctx.amps[i] * sin_lut[index];
 	}
-	//update_amps();
+	dac_out /= ctx.num_notes;
+	update_amps();
 	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (uint32_t) dac_out);
 }
 
