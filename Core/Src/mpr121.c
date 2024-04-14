@@ -11,6 +11,7 @@
 #define RELEASE_THRESHOLD 0x08
 
 extern I2C_HandleTypeDef hi2c1;
+extern uint8_t touch_status;
 
 int mpr121_init(uint8_t addr)
 {
@@ -39,11 +40,12 @@ int mpr121_init(uint8_t addr)
 		return -1;
 	}
 
-	// Enabling all electrodes with baseline tracking upon initialization
+	// Enabling all electrodes with baseline tracking upon initialisation
 	data = ECR_ALL_ENABLE;
 	if (mpr121_write(addr, ECR, &data, 1)) {
 		return -1;
 	}
+
 
 	return 0;
 }
@@ -52,11 +54,13 @@ int mpr121_set_thresholds(uint8_t addr, uint8_t touch, uint8_t release)
 {
 	uint8_t thresholds[] = {touch, release};
 	for (int i = 0; i < 2*NUM_ELECS; i += 2) {
+//		if (mpr121_write(addr, 0x41 + i, thresholds, 2)) {
+//			return -1;
+//		}
 		// touch
 		if (mpr121_write(addr, 0x41 + i, thresholds, 1)) {
 			return -1;
 		}
-		// release
 		if (mpr121_write(addr, 0x42 + i, thresholds+1, 1)) {
 			return -1;
 		}
@@ -78,6 +82,7 @@ int mpr121_read_nb(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size)
 
 int mpr121_write(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size)
 {
+	I2C_HandleTypeDef *sdf = &hi2c1;
 	return HAL_I2C_Mem_Write(&hi2c1, (addr << 1), reg_addr, I2C_MEMADD_SIZE_8BIT, data, size, HAL_MAX_DELAY);
 }
 
@@ -110,9 +115,7 @@ uint16_t mpr121_read_touch_status_nb(uint8_t addr)
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-//	while (HAL_I2C_GetState(&hi2c1) != HAL_I2C_STATE_READY)
-//	{
-//	}
-	// TBD: Check GPIO_Pin first?
-	uint16_t touch_status = mpr121_read_touch_status_nb(0x5A);
+	uint8_t status[2] = {0};
+	mpr121_read(0x5A, TOUCH_STATUS, status, 2);
+	touch_status = 1;
 }
