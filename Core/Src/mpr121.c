@@ -7,7 +7,7 @@
 #define RST_VAL 0x63
 #define ECR_ALL_ENABLE 0b10001100
 #define NUM_ELECS 12
-#define TOUCH_THRESHOLD 0x30
+#define TOUCH_THRESHOLD 0x0C
 #define RELEASE_THRESHOLD 0x08
 
 extern I2C_HandleTypeDef hi2c1;

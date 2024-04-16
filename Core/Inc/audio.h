@@ -28,6 +28,12 @@ void fill_freqs();
 void add_note(int note_idx);
 
 /*
+ * Sets the damp factor for a given note (existing in audio ctx)
+ * If high is 1, sets it to high, else low damping factor
+ */
+void set_damp_factor(int note, int high);
+
+/*
  * Decays all amplitudes by some factor and removes dead notes.
  */
 void update_amps();

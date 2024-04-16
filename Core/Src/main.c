@@ -131,19 +131,27 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   uint16_t touch_value;
+  uint16_t prev_touch_value;
 
 
   while (1)
   {
 	  if (touch_status) { // touch status set to 1 by ISR
 		  touch_value = mpr121_read_touch_status(0x5A);
+		  uint16_t changes = touch_value ^ prev_touch_value;
 		  touch_status = 0;
 		  for (int i = 0; i < 12; i++) {
-			  int on = (1 << i) & touch_value;
-			  if (on) {
-				  add_note(24 + i);
+			  int mask = (1 << i);
+			  if (mask & changes) {
+				  if (mask & touch_value) {
+					  add_note(24 + i);
+				  } else {
+					  // Remove finger
+					  set_damp_factor(24 + i, 1);
+				  }
 			  }
 		  }
+		  prev_touch_value = touch_value;
 	  }
 	  uint8_t b = mpr121_read_touch_status(0x5A);
 

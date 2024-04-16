@@ -13,7 +13,7 @@
 
 #define PI 3.14159265
 #define HIGH_DAMP_FACTOR 0.99
-#define LOW_DAMP_FACTOR 0.99
+#define LOW_DAMP_FACTOR 1
 
 #define AMP_UPDATE_INTR_COUNT 100
 
@@ -79,9 +79,26 @@ void add_note(int note_idx)
 		ctx.amps[ctx.num_notes] = INIT_AMP;
 		ctx.cycles[ctx.num_notes] = 0;
 		ctx.cycles_per_wave[ctx.num_notes] = intr_freq / (int) freqs[note_idx];
+		ctx.damp_factor &= ~(1 << ctx.num_notes);
 		ctx.num_notes++;
 	} else {
 		ctx.amps[existing_note_idx] = INIT_AMP;
+	}
+}
+
+
+void set_damp_factor(int note, int high)
+{
+	for (int i = 0; i < ctx.num_notes; i++) {
+		if (note == ctx.notes[i]) {
+			if (high) {
+				ctx.damp_factor |= (1 << i);
+			}
+			else {
+				// Low
+				ctx.damp_factor &= ~(1 << i);
+			}
+		}
 	}
 }
 
@@ -150,6 +167,7 @@ void init_timer(TIM_HandleTypeDef *htim)
 	HAL_TIM_Base_Init(&htim4);
 	HAL_TIM_Base_Start_IT(&htim4);
 }
+
 
 
 
