@@ -4,24 +4,24 @@
 #include "stm32l4xx_hal.h"
 #include "audio.h"
 
-#define LUT_SIZE 128
-#define INIT_AMP 0.3
+#define LUT_SIZE 512
+#define INIT_AMP 0.9
 #define DEAD_THRESHOLD 0.0001
 #define NUM_HARM 4
 #define PRESCALER 1
 #define BASE_CLK 120000000
 
 #define PI 3.14159265
-#define HIGH_DAMP_FACTOR 0.8
-#define LOW_DAMP_FACTOR 0.999
+#define HIGH_DAMP_FACTOR 0.99
+#define LOW_DAMP_FACTOR 0.99
 
-#define AMP_UPDATE_INTR_COUNT 20
+#define AMP_UPDATE_INTR_COUNT 100
 
 
 static float freqs[48];
 static audio_ctx_t ctx;
-static uint16_t sin_lut[LUT_SIZE];
-static const float harmonic_amps[NUM_HARM] = {1, 0.15, 0.1, 0};
+static int sin_lut[LUT_SIZE];
+static const float harmonic_amps[NUM_HARM] = {1, 0, 0, 0};
 static int intr_freq;
 
 static int amp_update_counter;
@@ -42,13 +42,19 @@ void fill_freqs()
 
 void fill_sin_lut()
 {
+	float harm_amp_sum = 0;
+	for (int i = 0; i < NUM_HARM; i++) {
+		harm_amp_sum += harmonic_amps[i];
+	}
+
 	// creates a sine wave look up table centered at VREF/2
 	for(uint16_t i = 0; i < LUT_SIZE; ++i) {
-		sin_lut[i] = (uint16_t) (sin((double) 2 * PI * i / (double)LUT_SIZE) * 2047 + 2048);
-		/*sin_lut[i] = 0;
+		//sin_lut[i] = (int) (sin((double) 2 * PI * i / LUT_SIZE) * 2047);
+		sin_lut[i] = 0;
 		for (int j = 0; j < NUM_HARM; j++) {
-			sin_lut[i] = (uint16_t) (sin((double) 2 * PI * i * (j+1) / LUT_SIZE) * 2047 + 2048);
-		}*/
+			sin_lut[i] += (int) (sin((double) 2 * PI * i * (j+1) / LUT_SIZE) * 2047 * harmonic_amps[j]);
+		}
+		sin_lut[i] /= harm_amp_sum;
 	}
 }
 
@@ -61,10 +67,11 @@ void add_note(int note_idx)
 	uint8_t note_exists = 0;
 	uint8_t existing_note_idx = MAX_NOTES + 1;
 
+	// Check for existing notes and update amp back to one if present
 	for (int i = 0; i < ctx.num_notes; i++) {
 		if (ctx.notes[i] == note_idx) {
 			note_exists = 1;
-			existing_note_idx = ctx.notes[i];
+			existing_note_idx = i;
 		}
 	}
 	if (!note_exists) {
@@ -112,21 +119,23 @@ void audio_tim_isr()
 		return;
 	}
 	for (int i = 0; i < ctx.num_notes; i++) {
-		ctx.cycles[i] = (ctx.cycles[i] + 1) % ctx.cycles_per_wave[i];
+		ctx.cycles[i]++;
+		if (ctx.cycles[i] >= ctx.cycles_per_wave[i]) {
+			ctx.cycles[i] = 0;
+		}
 		index = ctx.cycles[i] * LUT_SIZE / ctx.cycles_per_wave[i];
-		dac_out += ctx.amps[i] * sin_lut[index];
+		dac_out += ctx.amps[i] * sin_lut[index] + 2048;
 	}
 	dac_out /= ctx.num_notes;
+	if (index == 511) {
+		int x = 7;
+	}
 	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (uint32_t) dac_out);
 	amp_update_counter++;
-	if (amp_update_counter >= LUT_SIZE) {
+	if (amp_update_counter >= AMP_UPDATE_INTR_COUNT) {
 		amp_update_counter = 0;
 		update_amps();
 	}
-//	if (amp_update_counter >= AMP_UPDATE_INTR_COUNT) {
-//		amp_update_counter = 0;
-//		//update_amps();
-//	}
 }
 
 void init_timer(TIM_HandleTypeDef *htim)

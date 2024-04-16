@@ -112,39 +112,39 @@ int main(void)
   touch_status = 0;
 
   // Initialize DAC
-  HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0x0);
+  HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-
+  //while (1);
   // Initialize audio stuff
   init_audio_ctx();
   init_timer();
+/*
   while(1) {
-	  add_note(24);
-	  HAL_Delay(4000);
-	  add_note(27);
+	  add_note(22);
+	  add_note(26);
+	  add_note(29);
+	  HAL_Delay(2000);
   }
-
+*/
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   uint16_t touch_value;
 
+
   while (1)
   {
-	  /*
 	  if (touch_status) { // touch status set to 1 by ISR
 		  touch_value = mpr121_read_touch_status(0x5A);
 		  touch_status = 0;
 		  for (int i = 0; i < 12; i++) {
-			  uint8_t on = ((1 << i) & touch_value) >> i;
+			  int on = (1 << i) & touch_value;
 			  if (on) {
-				  add_note(12 + i);
+				  add_note(24 + i);
 			  }
 		  }
 	  }
-*/
-	  //
 	  uint8_t b = mpr121_read_touch_status(0x5A);
 
     /* USER CODE END WHILE */
@@ -584,7 +584,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
