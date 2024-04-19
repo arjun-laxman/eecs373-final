@@ -5,14 +5,15 @@
 #include "audio.h"
 
 #define LUT_SIZE 512
-#define INIT_AMP 0.9
+#define INIT_AMP 0.7
 #define DEAD_THRESHOLD 0.0001
 #define NUM_HARM 4
 #define PRESCALER 1
 #define BASE_CLK 120000000
+#define LOWEST_FREQ 110
 
 #define PI 3.14159265
-#define HIGH_DAMP_FACTOR 0.99
+#define HIGH_DAMP_FACTOR 0.9
 #define LOW_DAMP_FACTOR 1
 
 #define AMP_UPDATE_INTR_COUNT 100
@@ -31,7 +32,7 @@ extern TIM_HandleTypeDef htim4;
 
 void fill_freqs()
 {
-	double freq = 55;
+	double freq = LOWEST_FREQ;
 	double m = pow(2, (double)1/12);
 	for (int i = 0; i < 48; i++) {
 		freqs[i] = (float) freq;

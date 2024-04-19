@@ -7,7 +7,7 @@
 #define RST_VAL 0x63
 #define ECR_ALL_ENABLE 0b10001100
 #define NUM_ELECS 12
-#define TOUCH_THRESHOLD 0x0C
+#define TOUCH_THRESHOLD 0x30
 #define RELEASE_THRESHOLD 0x08
 
 extern I2C_HandleTypeDef hi2c1;
@@ -74,12 +74,6 @@ int mpr121_read(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size)
 	return HAL_I2C_Mem_Read(&hi2c1, (addr << 1) | 1, reg_addr, I2C_MEMADD_SIZE_8BIT, data, size, HAL_MAX_DELAY);
 }
 
-int mpr121_read_nb(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size)
-{
-	return HAL_I2C_Mem_Read_IT(&hi2c1, (addr << 1) | 1, reg_addr, I2C_MEMADD_SIZE_8BIT, data, size);
-}
-
-
 int mpr121_write(uint8_t addr, uint8_t reg_addr, uint8_t *data, int size)
 {
 	I2C_HandleTypeDef *sdf = &hi2c1;
@@ -98,20 +92,6 @@ uint16_t mpr121_read_touch_status(uint8_t addr)
 	ret |= status[0];
 	return ret;
 }
-
-uint16_t mpr121_read_touch_status_nb(uint8_t addr)
-{
-	uint8_t status[2] = {0};
-	if (mpr121_read_nb(addr, TOUCH_STATUS, status, 2)) {
-		return ~0;
-
-	}
-	uint16_t ret = status[1];
-	ret <<= 8;
-	ret |= status[0];
-	return ret;
-}
-
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
