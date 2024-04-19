@@ -5,7 +5,7 @@
 #include "audio.h"
 
 #define LUT_SIZE 512
-#define INIT_AMP 0.7
+#define INIT_AMP 0.5
 #define DEAD_THRESHOLD 0.0001
 #define NUM_HARM 4
 #define PRESCALER 1
@@ -13,8 +13,9 @@
 #define LOWEST_FREQ 110
 
 #define PI 3.14159265
-#define HIGH_DAMP_FACTOR 0.9
-#define LOW_DAMP_FACTOR 1
+#define HIGH_DAMP_FACTOR 0.99
+#define LOW_DAMP_FACTOR 0.9999
+#define ATTACK_FACTOR 0.2
 
 #define AMP_UPDATE_INTR_COUNT 100
 
@@ -22,7 +23,7 @@
 static float freqs[48];
 static audio_ctx_t ctx;
 static int sin_lut[LUT_SIZE];
-static const float harmonic_amps[NUM_HARM] = {1, 0, 0, 0};
+static const float harmonic_amps[NUM_HARM] = {1, 0.5, 0.10, 0.05};
 static int intr_freq;
 
 static int amp_update_counter;
@@ -59,7 +60,7 @@ void fill_sin_lut()
 	}
 }
 
-void add_note(int note_idx)
+void add_note(int note_idx, float note_amp)
 {
 	if (ctx.num_notes >= MAX_NOTES) {
 		// ERROR or remove lowest amp note??
@@ -77,13 +78,14 @@ void add_note(int note_idx)
 	}
 	if (!note_exists) {
 		ctx.notes[ctx.num_notes] = note_idx;
-		ctx.amps[ctx.num_notes] = INIT_AMP;
+		ctx.amps[ctx.num_notes] = note_amp;
+//		ctx.played_amps[ctx.num_notes] = note_amp;
 		ctx.cycles[ctx.num_notes] = 0;
 		ctx.cycles_per_wave[ctx.num_notes] = intr_freq / (int) freqs[note_idx];
 		ctx.damp_factor &= ~(1 << ctx.num_notes);
 		ctx.num_notes++;
 	} else {
-		ctx.amps[existing_note_idx] = INIT_AMP;
+		ctx.played_amps[existing_note_idx] = note_amp;
 	}
 }
 
@@ -106,16 +108,30 @@ void set_damp_factor(int note, int high)
 void update_amps()
 {
 	for (int i = 0; i < ctx.num_notes; i++) {
-		if (ctx.damp_factor & (1 << i)) {
+//		if (ctx.played_amps[i] >= ctx.amps[i]) { // attack isn't instant
+//			if (ctx.amps[i] + ATTACK_FACTOR > ctx.played_amps[i]) {
+//				ctx.amps[i] = ctx.played_amps[i];
+//				ctx.played_amps[i] = 0;
+//			} else {
+//				ctx.amps[i] += ATTACK_FACTOR;
+//			}
+//		} else
+		if (ctx.damp_factor & (1 << i)) { // decay fast
 			ctx.amps[i] *= HIGH_DAMP_FACTOR;
 		} else {
-			ctx.amps[i] *= LOW_DAMP_FACTOR;
+			ctx.amps[i] *= LOW_DAMP_FACTOR; //decay slowly
 		}
 	}
 	for (int i = ctx.num_notes - 1; i >= 0; i--) {
 		if (ctx.amps[i] <= DEAD_THRESHOLD) {
 			// Remove note
+			ctx.notes[i] = ctx.notes[ctx.num_notes - 1];
 			ctx.amps[i] = ctx.amps[ctx.num_notes - 1];
+			ctx.cycles[i] = ctx.cycles[ctx.num_notes - 1];
+			ctx.cycles_per_wave[i] = ctx.cycles_per_wave[ctx.num_notes - 1];
+			ctx.damp_factor &= ~(1 << i); // removing current note's damp factor
+			ctx.damp_factor |= (1 << (ctx.num_notes - 1));
+//			ctx.played_amps[i] = ctx.played_amps[ctx.num_notes - 1];
 			ctx.num_notes--;
 		}
 	}
@@ -132,6 +148,7 @@ void init_audio_ctx()
 void audio_tim_isr()
 {
 	uint32_t index;
+	float amp_sum = 0.0001;
 	float dac_out = 0;
 	if (ctx.num_notes == 0) {
 		return;
@@ -145,9 +162,6 @@ void audio_tim_isr()
 		dac_out += ctx.amps[i] * sin_lut[index] + 2048;
 	}
 	dac_out /= ctx.num_notes;
-	if (index == 511) {
-		int x = 7;
-	}
 	HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (uint32_t) dac_out);
 	amp_update_counter++;
 	if (amp_update_counter >= AMP_UPDATE_INTR_COUNT) {
@@ -168,22 +182,3 @@ void init_timer(TIM_HandleTypeDef *htim)
 	HAL_TIM_Base_Init(&htim4);
 	HAL_TIM_Base_Start_IT(&htim4);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
