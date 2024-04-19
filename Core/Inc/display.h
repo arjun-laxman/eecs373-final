@@ -106,6 +106,17 @@ void disp_write_data(void *data, int len);
 /*
  * Reads values from the display
  */
-void disp_read_data(void *data, int len);
+inline void disp_read_data(void *data, int len);
+
+/*
+ * Sets a pixel at (x,y)
+ */
+void disp_set_pixel(uint16_t x, uint16_t y, uint16_t color);
+
+/*
+ * Fills a rectangle with a color.
+ * Top right coordinates are at (x,y).
+ */
+void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color);
 
 #endif

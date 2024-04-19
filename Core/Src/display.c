@@ -1,7 +1,30 @@
+#include <math.h>
 #include "stm32l4xx_hal.h"
 #include "display.h"
 
+#define PI 3.14159265
+#define HSPI_WRITE16(s) trans_write(s)
+
+#define HSPI_WRITE_PIXELS(c,l)  \
+	for(uint32_t i=0; i<(l); i+=2) { \
+		HSPI_WRITE16( *((uint16_t*)((uint8_t*)c + i)) ); \
+	} \
+
 extern SPI_HandleTypeDef hspi1;
+
+static uint16_t htons(uint16_t n)
+{
+	uint16_t r = (n << 8) | (n >> 8);
+	return r;
+}
+
+
+static void trans_write(uint16_t value)
+{
+	uint8_t tx[2] = {(uint8_t)((value>>8) & 0xFF), (uint8_t)((value) & 0xFF)};
+	uint8_t rx[2] = {0};
+	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
+}
 
 static const uint8_t init_seq[] = {
         HX8357_SWRESET,
@@ -109,6 +132,7 @@ static const uint8_t init_seq[] = {
         0,             // END OF COMMAND LIST
 };
 
+
 int disp_init()
 {
 	// Init SS and D/C to high
@@ -138,32 +162,36 @@ int disp_init()
 
 	disp_read(0x0A, &data, 2);
 	//disp_write(0x22, 0, 0);
+	// Clear out display
+	disp_fill_rect(0, 0, HX8357_TFTWIDTH, HX8357_TFTHEIGHT, HX8357_WHITE);
+	disp_fill_rect(HX8357_TFTWIDTH/2 - 1, 0, 2, HX8357_TFTHEIGHT, 0x0f2e);
+	const uint16_t half_amp = 1*HX8357_TFTWIDTH/3;
+	for (uint16_t x = 0; x < HX8357_TFTHEIGHT; x++) {
+		uint16_t y = (uint16_t)((sin(10 * 2 * PI * x / HX8357_TFTHEIGHT) + sin(3 * 2 * PI * x / HX8357_TFTHEIGHT))/2 * half_amp + HX8357_TFTWIDTH/2);
+		disp_fill_rect(y, x, 3, 3, 0x03bf);
+	}
 
+}
 
-	// Write one pixel
-	uint16_t x_win[] = {0, HX8357_TFTWIDTH - 1};
-	uint16_t y_win[] = {0, HX8357_TFTHEIGHT - 1};
+inline void disp_set_pixel(uint16_t x, uint16_t y, uint16_t color)
+{
+	disp_fill_rect(x, y, 1, 1, color);
+}
+
+void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
+{
+	uint16_t x_win[] = {htons(x), htons(x + width - 1)};
+	uint16_t y_win[] = {htons(y), htons(y + height - 1)};
 	disp_write(HX8357_CASET, x_win, 4);
 	disp_write(HX8357_PASET, y_win, 4);
 
-
-	// Set SS to low
+	color = htons(color);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 0);
-	uint16_t color = HX8357_RED;
-	// Write command to display
 	disp_write_cmd(HX8357_RAMWR);
-
-	for (int i = 0; i < 100; i++){
-		// Write data to display
-		disp_write_data(&color, sizeof(color));
+	for (int i = 0; i < height * width; i++) {
+		disp_write_data(&color, 2);
 	}
-	// Set SS to high
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
-
-
-	uint16_t buf[16];
-	disp_read(HX8357_RAMRD, buf, 16);
-
 }
 
 
