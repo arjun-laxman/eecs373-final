@@ -1,29 +1,35 @@
 #include <math.h>
 #include "stm32l4xx_hal.h"
+#include "font7x5.h"
 #include "display.h"
 
-#define PI 3.14159265
-#define HSPI_WRITE16(s) trans_write(s)
+#define LANDSCAPE
 
-#define HSPI_WRITE_PIXELS(c,l)  \
-	for(uint32_t i=0; i<(l); i+=2) { \
-		HSPI_WRITE16( *((uint16_t*)((uint8_t*)c + i)) ); \
-	} \
+#define CHAR_HEIGHT 7
+#define CHAR_WIDTH 5
+#define CHAR_PADDING 1
+#define PI 3.14159265
+
+#ifdef LANDSCAPE
+#define DISP_HEIGHT HX8357_WIDTH
+#define DISP_WIDTH HX8357_HEIGHT
+#else
+#define DISP_HEIGHT HX8357_HEIGHT
+#define DISP_WIDTH HX8357_WIDTH
+#endif
 
 extern SPI_HandleTypeDef hspi1;
+
+#define SWAPU16(a, b) {\
+	uint16_t tmp = (a); \
+	(a) = (b); \
+	(b) = tmp; \
+}
 
 static uint16_t htons(uint16_t n)
 {
 	uint16_t r = (n << 8) | (n >> 8);
 	return r;
-}
-
-
-static void trans_write(uint16_t value)
-{
-	uint8_t tx[2] = {(uint8_t)((value>>8) & 0xFF), (uint8_t)((value) & 0xFF)};
-	uint8_t rx[2] = {0};
-	HAL_SPI_TransmitReceive(&hspi1, tx, rx, 2, HAL_MAX_DELAY);
 }
 
 static const uint8_t init_seq[] = {
@@ -132,13 +138,71 @@ static const uint8_t init_seq[] = {
         0,             // END OF COMMAND LIST
 };
 
+/*
+ * Writes a command to the display
+ */
+static void disp_write_cmd(uint8_t cmd)
+{
+	// Set D/C to low
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 0);
+
+	// Write cmd
+	HAL_SPI_Transmit(&hspi1, &cmd, 1, HAL_MAX_DELAY);
+	// Set D/C to high
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
+}
+
+/*
+ * Writes data to the display
+ */
+static void disp_write_data(const void *data, int len)
+{
+	if (len == 0) return;
+
+	// Set D/C to high
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
+
+	// Write data
+	HAL_SPI_Transmit(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
+}
+
+/*
+ * Reads values from the display
+ */
+static void disp_read_data(void *data, int len)
+{
+	if (len == 0) return;
+
+	// Set D/C to high
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
+
+	// Write data
+	HAL_SPI_Receive(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
+}
+
+/*
+ * If mode is landscape, converts landscape coordinates to
+ * base display portrait coordinates.
+ */
+static inline void orient_rect(uint16_t *x, uint16_t *y, uint16_t *width, uint16_t *height)
+{
+#ifdef LANDSCAPE
+	uint16_t new_x = HX8357_WIDTH - (*y + *height);
+	uint16_t new_y = *x;
+	uint16_t new_width = *height;
+	uint16_t new_height = *width;
+	*x = new_x;
+	*y = new_y;
+	*width = new_width;
+	*height = new_height;
+#endif
+}
 
 int disp_init()
 {
 	// Init SS and D/C to high
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
-
 
 	uint16_t data;
 
@@ -163,13 +227,19 @@ int disp_init()
 	disp_read(0x0A, &data, 2);
 	//disp_write(0x22, 0, 0);
 	// Clear out display
-	disp_fill_rect(0, 0, HX8357_TFTWIDTH, HX8357_TFTHEIGHT, HX8357_WHITE);
-	disp_fill_rect(HX8357_TFTWIDTH/2 - 1, 0, 2, HX8357_TFTHEIGHT, 0x0f2e);
-	const uint16_t half_amp = 1*HX8357_TFTWIDTH/3;
-	for (uint16_t x = 0; x < HX8357_TFTHEIGHT; x++) {
-		uint16_t y = (uint16_t)((sin(10 * 2 * PI * x / HX8357_TFTHEIGHT) + sin(3 * 2 * PI * x / HX8357_TFTHEIGHT))/2 * half_amp + HX8357_TFTWIDTH/2);
-		disp_fill_rect(y, x, 3, 3, 0x03bf);
+	disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
+	//disp_fill_rect(DISP_WIDTH/2 - 1, 0, 2, DISP_HEIGHT, 0x0f2e);
+	const uint16_t half_amp = 1*DISP_HEIGHT/3;
+	uint16_t prev_x = 0, prev_y = DISP_HEIGHT / 2;
+
+	for (uint16_t x = 0; x < DISP_WIDTH; x += 4) {
+		uint16_t y = (uint16_t)((sin(10 * 2 * PI * x / DISP_WIDTH) + sin(3 * 2 * PI * x / DISP_WIDTH))/2 * half_amp + DISP_HEIGHT/2);
+		disp_draw_line(prev_x, prev_y, x, y, 4, 0x03bf);
+		prev_x = x;
+		prev_y = y;
 	}
+	//disp_print("Arjun is very cool", 10, 10, 4, 0x03bf, 0xffff);
+	//disp_draw_line(125, 300, 10, 15, 2, RED);
 
 }
 
@@ -180,11 +250,23 @@ inline void disp_set_pixel(uint16_t x, uint16_t y, uint16_t color)
 
 void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint16_t color)
 {
+
+	orient_rect(&x, &y, &width, &height);
+
+	// Check input
+	if (x >= HX8357_WIDTH || y >= HX8357_HEIGHT) {
+		return;
+	}
+	width = (width > HX8357_WIDTH - x) ? HX8357_WIDTH - x : width;
+	height = (width > HX8357_HEIGHT - y) ? HX8357_HEIGHT - y : height;
+
+	// Set window
 	uint16_t x_win[] = {htons(x), htons(x + width - 1)};
 	uint16_t y_win[] = {htons(y), htons(y + height - 1)};
 	disp_write(HX8357_CASET, x_win, 4);
 	disp_write(HX8357_PASET, y_win, 4);
 
+	// Write color
 	color = htons(color);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 0);
 	disp_write_cmd(HX8357_RAMWR);
@@ -194,6 +276,91 @@ void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uin
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
 }
 
+void disp_draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t size, uint16_t color)
+{
+	// Check inputs
+
+	if (x2 >= DISP_WIDTH || y2 >= DISP_HEIGHT) {
+		return;
+	}
+	// Just fill rectangle fast for horizontal/vertical lines
+	if (x1 == x2) {
+		if (y1 > y2) SWAPU16(y1, y2);
+		disp_fill_rect(x1, y1, size, y2 - y1 + 1, color);
+		return;
+	}
+	if (y1 == y2) {
+		if (x1 > x2) SWAPU16(x1, x2);
+		disp_fill_rect(x1, y1, x2 - x1 + 1, size, color);
+		return;
+	}
+
+	int dx = abs(x2 - x1);
+	int dy = -abs(y2 - y1);
+	int sx = x1 < x2 ? 1 : -1;
+	int sy = y1 < y2 ? 1 : -1;
+	int err = dx + dy;
+
+	// Draw line
+	while (1) {
+		disp_fill_rect(x1, y1, size, size, color);
+		if (x1 == x2 && y1 == y2) break;
+
+		int err2 = err * 2;
+		if (err2 >= dy) {
+			if (x1 == x2) break;
+			err += dy;
+			x1 += sx;
+		}
+		if (err2 <= dx) {
+			if (y1 == y2) break;
+			err += dx;
+			y1 += sy;
+		}
+	}
+/*
+	for (int x = x1; x <= x2; x++) {
+		// Place point reordered if ygx
+		if (ygx) {
+			disp_fill_rect(y, x, size, size, color);
+		} else {
+			disp_fill_rect(x, y, size, size, color);
+		}
+		// Update D and y
+		if (D > 0) {
+			y++;
+			D -= 2*dx;
+		}
+		D += 2*dy;
+	}
+	*/
+
+}
+
+void disp_print_char(char c, uint16_t x, uint16_t y, uint8_t size, uint16_t fg, uint16_t bg)
+{
+	for (int i = 0; i < CHAR_WIDTH; i++) {
+		uint8_t col = font7x5[5*c + i];
+		for (int j = 0; j < CHAR_HEIGHT; j++) {
+			if (col & 1) {
+				disp_fill_rect(x + size*i, y + size*j, size, size, fg);
+			} else {
+				disp_fill_rect(x + size*i, y + size*j, size, size, bg);
+			}
+			col >>= 1;
+		}
+	}
+}
+
+void disp_print(char *s, uint16_t x, uint16_t y, uint8_t size, uint16_t fg, uint16_t bg)
+{
+	while (*s) {
+		disp_print_char(*s, x, y, size, fg, bg);
+		s++;
+		x += (CHAR_WIDTH + CHAR_PADDING)*size;
+	}
+
+}
 
 void disp_read(uint8_t cmd, void *data, int len)
 {
@@ -211,7 +378,7 @@ void disp_read(uint8_t cmd, void *data, int len)
 }
 
 
-void disp_write(uint8_t cmd, void *data, int len)
+void disp_write(uint8_t cmd, const void *data, int len)
 {
 	// Set SS to low
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 0);
@@ -224,47 +391,4 @@ void disp_write(uint8_t cmd, void *data, int len)
 
 	// Set SS to high
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
-}
-
-/*
- * Writes a command to the display
- */
-void disp_write_cmd(uint8_t cmd)
-{
-
-	// Set D/C to low
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 0);
-
-	// Write cmd
-	HAL_SPI_Transmit(&hspi1, &cmd, 1, HAL_MAX_DELAY);
-	// Set D/C to high
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
-}
-
-/*
- * Writes data to the display
- */
-void disp_write_data(void *data, int len)
-{
-	if (len == 0) return;
-
-	// Set D/C to high
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
-
-	// Write data
-	HAL_SPI_Transmit(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
-}
-
-/*
- * Reads values from the display
- */
-void disp_read_data(void *data, int len)
-{
-	if (len == 0) return;
-
-	// Set D/C to high
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
-
-	// Write data
-	HAL_SPI_Receive(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
 }
