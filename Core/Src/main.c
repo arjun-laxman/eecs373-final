@@ -107,12 +107,12 @@ int main(void)
   MX_TIM4_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  /*
+
   for (uint8_t addr = 0x5A; addr <= 0x5A; addr+=3) {
   	  if (mpr121_init(addr) != 0) {
   		  // TBD: ERROR
   	  }
-  }*/
+  }
 
   // resetting touch status
   touch_status = 0;
@@ -120,7 +120,7 @@ int main(void)
   disp_init();
 
 
-/*
+
   // Initialize DAC
   HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
@@ -128,7 +128,7 @@ int main(void)
   // Initialize audio stuff
   init_audio_ctx();
   init_timer();
-  /*
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -136,28 +136,25 @@ int main(void)
   uint16_t touch_value;
   uint16_t prev_touch_value;
 
-
   while (1)
   {
-	  /*
 	  if (touch_status) { // touch status set to 1 by ISR
 		  touch_value = mpr121_read_touch_status(0x5A);
 		  uint16_t changes = touch_value ^ prev_touch_value;
 		  touch_status = 0;
 		  for (int i = 0; i < 12; i++) {
 			  int mask = (1 << i);
-			  if (mask & changes) {
-				  if (mask & touch_value) {
-					  add_note(36 + i);
+			  if (mask & changes) { // at changed index
+				  if (mask & touch_value) { //
+					  add_note(24 + i, 0.5);
 				  } else {
 					  // Remove finger
-					  set_damp_factor(36 + i, 1);
+					  set_damp_factor(i, 1);
 				  }
 			  }
 		  }
 		  prev_touch_value = touch_value;
 	  }
-*/
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -330,7 +327,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -486,22 +483,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE7 PE8 PE9 PE10
-                           PE11 PE12 PE13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10
-                          |GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13;
+  /*Configure GPIO pins : PE7 PE8 PE9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF1_TIM1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE14 PE15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF3_TIM1_COMP1;
+  /*Configure GPIO pins : PE10 PE12 PE14 PE15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14|GPIO_PIN_15;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB10 */
@@ -611,6 +604,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

@@ -12,6 +12,7 @@ typedef struct audio_ctx_s {
 	int cycles[MAX_NOTES];
 	int cycles_per_wave[MAX_NOTES];
 	float amps[MAX_NOTES];
+	float played_amps[MAX_NOTES];
 	uint16_t damp_factor; // High or low bits for high or low damp
 } audio_ctx_t;
 
@@ -25,7 +26,7 @@ void fill_freqs();
 /*
  * Adds note to list of notes.
  */
-void add_note(int note_idx);
+void add_note(int note_idx, float note_amp);
 
 /*
  * Sets the damp factor for a given note (existing in audio ctx)
