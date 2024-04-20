@@ -57,6 +57,9 @@ TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
 volatile uint8_t touch_status;
+volatile uint16_t intr_addr;
+volatile uint8_t  octave_no;
+volatile uint8_t sustain;
 
 /* USER CODE END PV */
 
@@ -107,7 +110,9 @@ int main(void)
   MX_TIM4_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  for (uint8_t addr = 0x5A; addr <= 0x5A; addr+=3) {
+
+
+  for (uint8_t addr = 0x5A; addr <= 0x5B; addr++) {
   	  if (mpr121_init(addr) != 0) {
   		  // TBD: ERROR
   	  }
@@ -129,27 +134,33 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   uint16_t touch_value;
   uint16_t prev_touch_value;
-
+  sustain = 0;
+//  octave_no = 1;
   while (1)
   {
 	  if (touch_status) { // touch status set to 1 by ISR
 		  touch_status = 0;
-		  touch_value = mpr121_read_touch_status(0x5A);
+		  touch_value = mpr121_read_touch_status(0x5A + octave_no);
 		  uint16_t changes = touch_value ^ prev_touch_value;
 
+		  if (octave_no == 4) {
+//			  touch_value = 0; // invalid touch
+		  }
+		  uint8_t octave_A = (octave_no * 12); // A note idx for octave
 		  for (int i = 0; i < 12; i++) {
 			  int mask = (1 << i);
 			  if (mask & changes) {
-				  if (mask & touch_value) {
-					  add_note(i, 1);
+				  if (mask & touch_value) { // if note i in octave was pressed
+					  add_note(octave_A + 12 + i, 0.7);
 				  } else {
 					  // Remove finger
-					  set_damp_factor(i, 1);
+					  set_damp_factor(octave_A +12 + i, 1);
 				  }
 			  }
 		  }
 		  prev_touch_value = touch_value;
 	  }
+	  sustain = !HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_0);
 
     /* USER CODE END WHILE */
 
@@ -403,8 +414,8 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
   HAL_PWREx_EnableVddIO2();
 
   /*Configure GPIO pin Output Level */
@@ -479,20 +490,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE7 PE8 PE9 PE11
-                           PE13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_11
-                          |GPIO_PIN_13;
+  /*Configure GPIO pin : PG0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PE7 PE8 PE9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF1_TIM1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PE10 PE12 PE14 PE15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_12|GPIO_PIN_14|GPIO_PIN_15;
+  /*Configure GPIO pins : PE10 PE11 PE12 PE13
+                           PE14 PE15 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13
+                          |GPIO_PIN_14|GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB10 */
@@ -594,12 +611,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF7_USART2;
-  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PD7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB7 */
