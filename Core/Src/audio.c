@@ -4,32 +4,33 @@
 #include "stm32l4xx_hal.h"
 #include "audio.h"
 
-#define LUT_SIZE 512
+#define LUT_SIZE 256
 #define INIT_AMP 0.5
 #define DEAD_THRESHOLD 0.0001
 #define NUM_HARM 4
 #define PRESCALER 1
 #define BASE_CLK 120000000
-#define LOWEST_FREQ 110
+#define LOWEST_FREQ 55
 
 #define PI 3.14159265
 #define HIGH_DAMP_FACTOR 0.99
-#define LOW_DAMP_FACTOR 0.9999
+#define LOW_DAMP_FACTOR 0.999
 #define ATTACK_FACTOR 0.2
 
-#define AMP_UPDATE_INTR_COUNT 10
+#define AMP_UPDATE_INTR_COUNT 20
 
 
 static float freqs[48];
 static audio_ctx_t ctx;
 static int sin_lut[LUT_SIZE];
-static const float harmonic_amps[NUM_HARM] = {1, 0.6, 0.10, 0.05};
+static const float harmonic_amps[NUM_HARM] = {1, 0.4, 0.6, 0.15};
 static int intr_freq;
 
 static int amp_update_counter;
 
 extern DAC_HandleTypeDef hdac1;
 extern TIM_HandleTypeDef htim4;
+extern uint8_t sustain;
 
 void fill_freqs()
 {
@@ -40,11 +41,6 @@ void fill_freqs()
 		freq *= m;
 	}
 	intr_freq = (int) freqs[47]*LUT_SIZE;
-}
-
-float r_amp_it_up(int note_idx, float unscaled_amp)
-{
-	return unscaled_amp + 0.2*((47-note_idx)/48);
 }
 
 void fill_sin_lut()
@@ -71,8 +67,8 @@ void add_note(int note_idx, float note_amp)
 		// ERROR or remove lowest amp note??
 		return;
 	}
-	float scaled_amp = r_amp_it_up(note_idx, note_amp);
-
+//	float scaled_amp = note_amp + 0.2*((47-note_idx)/48);
+	float scaled_amp = note_amp;
 	uint8_t note_exists = 0;
 	uint8_t existing_note_idx = MAX_NOTES + 1;
 
@@ -85,13 +81,13 @@ void add_note(int note_idx, float note_amp)
 	}
 	if (!note_exists) {
 		ctx.notes[ctx.num_notes] = note_idx;
-		ctx.amps[ctx.num_notes] = note_amp;
+		ctx.amps[ctx.num_notes] = scaled_amp;
 		ctx.cycles[ctx.num_notes] = 0;
 		ctx.cycles_per_wave[ctx.num_notes] = intr_freq / (int) freqs[note_idx];
 		ctx.damp_factor &= ~(1 << ctx.num_notes);
 		ctx.num_notes++;
 	} else {
-		ctx.amps[existing_note_idx] = note_amp;
+		ctx.amps[existing_note_idx] = scaled_amp;
 	}
 }
 
@@ -114,7 +110,9 @@ void set_damp_factor(int note, int high)
 void update_amps()
 {
 	for (int i = 0; i < ctx.num_notes; i++) {
-		if (ctx.damp_factor & (1 << i)) { // decay fast
+		if (sustain) {
+			ctx.amps[i] *= LOW_DAMP_FACTOR;
+		} else if (ctx.damp_factor & (1 << i)) { // decay fast
 			ctx.amps[i] *= HIGH_DAMP_FACTOR;
 		} else {
 			ctx.amps[i] *= LOW_DAMP_FACTOR; //decay slowly
@@ -126,6 +124,7 @@ void update_amps()
 			ctx.notes[i] = ctx.notes[ctx.num_notes - 1];
 			ctx.amps[i] = ctx.amps[ctx.num_notes - 1];
 			ctx.cycles[i] = ctx.cycles[ctx.num_notes - 1];
+//			ctx.amps[ctx.num_notes - 1] = 0;
 			ctx.cycles_per_wave[i] = ctx.cycles_per_wave[ctx.num_notes - 1];
 			ctx.damp_factor &= ~(1 << i); // removing current note's damp factor
 			ctx.damp_factor |= (1 << (ctx.num_notes - 1));
@@ -145,7 +144,6 @@ void init_audio_ctx()
 void audio_tim_isr()
 {
 	uint32_t index;
-	float amp_sum = 0.0001;
 	float dac_out = 0;
 	if (ctx.num_notes == 0) {
 		return;
