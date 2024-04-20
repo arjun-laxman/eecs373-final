@@ -17,13 +17,13 @@
 #define LOW_DAMP_FACTOR 0.9999
 #define ATTACK_FACTOR 0.2
 
-#define AMP_UPDATE_INTR_COUNT 100
+#define AMP_UPDATE_INTR_COUNT 10
 
 
 static float freqs[48];
 static audio_ctx_t ctx;
 static int sin_lut[LUT_SIZE];
-static const float harmonic_amps[NUM_HARM] = {1, 0.5, 0.10, 0.05};
+static const float harmonic_amps[NUM_HARM] = {1, 0.6, 0.10, 0.05};
 static int intr_freq;
 
 static int amp_update_counter;
@@ -42,6 +42,11 @@ void fill_freqs()
 	intr_freq = (int) freqs[47]*LUT_SIZE;
 }
 
+float r_amp_it_up(int note_idx, float unscaled_amp)
+{
+	return unscaled_amp + 0.2*((47-note_idx)/48);
+}
+
 void fill_sin_lut()
 {
 	float harm_amp_sum = 0;
@@ -51,7 +56,6 @@ void fill_sin_lut()
 
 	// creates a sine wave look up table centered at VREF/2
 	for(uint16_t i = 0; i < LUT_SIZE; ++i) {
-		//sin_lut[i] = (int) (sin((double) 2 * PI * i / LUT_SIZE) * 2047);
 		sin_lut[i] = 0;
 		for (int j = 0; j < NUM_HARM; j++) {
 			sin_lut[i] += (int) (sin((double) 2 * PI * i * (j+1) / LUT_SIZE) * 2047 * harmonic_amps[j]);
@@ -60,12 +64,15 @@ void fill_sin_lut()
 	}
 }
 
+// TODO: scale amplitude depending on frequency
 void add_note(int note_idx, float note_amp)
 {
 	if (ctx.num_notes >= MAX_NOTES) {
 		// ERROR or remove lowest amp note??
 		return;
 	}
+	float scaled_amp = r_amp_it_up(note_idx, note_amp);
+
 	uint8_t note_exists = 0;
 	uint8_t existing_note_idx = MAX_NOTES + 1;
 
@@ -79,13 +86,12 @@ void add_note(int note_idx, float note_amp)
 	if (!note_exists) {
 		ctx.notes[ctx.num_notes] = note_idx;
 		ctx.amps[ctx.num_notes] = note_amp;
-//		ctx.played_amps[ctx.num_notes] = note_amp;
 		ctx.cycles[ctx.num_notes] = 0;
 		ctx.cycles_per_wave[ctx.num_notes] = intr_freq / (int) freqs[note_idx];
 		ctx.damp_factor &= ~(1 << ctx.num_notes);
 		ctx.num_notes++;
 	} else {
-		ctx.played_amps[existing_note_idx] = note_amp;
+		ctx.amps[existing_note_idx] = note_amp;
 	}
 }
 
@@ -108,14 +114,6 @@ void set_damp_factor(int note, int high)
 void update_amps()
 {
 	for (int i = 0; i < ctx.num_notes; i++) {
-//		if (ctx.played_amps[i] >= ctx.amps[i]) { // attack isn't instant
-//			if (ctx.amps[i] + ATTACK_FACTOR > ctx.played_amps[i]) {
-//				ctx.amps[i] = ctx.played_amps[i];
-//				ctx.played_amps[i] = 0;
-//			} else {
-//				ctx.amps[i] += ATTACK_FACTOR;
-//			}
-//		} else
 		if (ctx.damp_factor & (1 << i)) { // decay fast
 			ctx.amps[i] *= HIGH_DAMP_FACTOR;
 		} else {
@@ -131,7 +129,6 @@ void update_amps()
 			ctx.cycles_per_wave[i] = ctx.cycles_per_wave[ctx.num_notes - 1];
 			ctx.damp_factor &= ~(1 << i); // removing current note's damp factor
 			ctx.damp_factor |= (1 << (ctx.num_notes - 1));
-//			ctx.played_amps[i] = ctx.played_amps[ctx.num_notes - 1];
 			ctx.num_notes--;
 		}
 	}
