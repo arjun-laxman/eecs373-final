@@ -12,6 +12,8 @@
 
 extern I2C_HandleTypeDef hi2c1;
 extern uint8_t touch_status;
+extern uint16_t intr_addr;
+extern uint8_t  octave_no;
 
 int mpr121_init(uint8_t addr)
 {
@@ -54,9 +56,7 @@ int mpr121_set_thresholds(uint8_t addr, uint8_t touch, uint8_t release)
 {
 	uint8_t thresholds[] = {touch, release};
 	for (int i = 0; i < 2*NUM_ELECS; i += 2) {
-//		if (mpr121_write(addr, 0x41 + i, thresholds, 2)) {
-//			return -1;
-//		}
+
 		// touch
 		if (mpr121_write(addr, 0x41 + i, thresholds, 1)) {
 			return -1;
@@ -96,6 +96,16 @@ uint16_t mpr121_read_touch_status(uint8_t addr)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint8_t status[2] = {0};
-	mpr121_read(0x5A, TOUCH_STATUS, status, 2);
+	octave_no = (GPIO_Pin == 0x400 ) ? 0 :
+				(GPIO_Pin == 0x1000) ? 1 :
+				(GPIO_Pin == 0x4000) ? 2 :
+				(GPIO_Pin == 0x8000) ? 3 : 4; //error
+
+	mpr121_read(0x5A + octave_no, TOUCH_STATUS, status, 2);
 	touch_status = 1;
+	intr_addr = GPIO_Pin;
+
 }
+
+
+
