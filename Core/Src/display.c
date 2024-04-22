@@ -3,22 +3,14 @@
 #include "font7x5.h"
 #include "display.h"
 
-#define LANDSCAPE
-
-#define CHAR_HEIGHT 7
-#define CHAR_WIDTH 5
-#define CHAR_PADDING 1
+#define DMA_THRESHOLD 4
+#define DMA_BUF_SIZE 256
 #define PI 3.14159265
 
-#ifdef LANDSCAPE
-#define DISP_HEIGHT HX8357_WIDTH
-#define DISP_WIDTH HX8357_HEIGHT
-#else
-#define DISP_HEIGHT HX8357_HEIGHT
-#define DISP_WIDTH HX8357_WIDTH
-#endif
-
 extern SPI_HandleTypeDef hspi1;
+
+static int dma_busy = 0;
+static uint8_t dma_buf[DMA_BUF_SIZE];
 
 #define SWAPU16(a, b) {\
 	uint16_t tmp = (a); \
@@ -162,8 +154,18 @@ static void disp_write_data(const void *data, int len)
 	// Set D/C to high
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, 1);
 
+
+	while (dma_busy);
+	memcpy(dma_buf, data, len);
 	// Write data
-	HAL_SPI_Transmit(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
+	if (len >= DMA_THRESHOLD) {
+		// Use DMA
+		//dma_busy = 1;
+		//HAL_SPI_Transmit_DMA(&hspi1, (uint8_t *) dma_buf, len);
+		HAL_SPI_Transmit(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
+	} else {
+		HAL_SPI_Transmit(&hspi1, (uint8_t *) data, len, HAL_MAX_DELAY);
+	}
 }
 
 /*
@@ -224,22 +226,33 @@ int disp_init()
 		}
 	}
 
-	disp_read(0x0A, &data, 2);
-	//disp_write(0x22, 0, 0);
 	// Clear out display
 	disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
-	//disp_fill_rect(DISP_WIDTH/2 - 1, 0, 2, DISP_HEIGHT, 0x0f2e);
-	const uint16_t half_amp = 1*DISP_HEIGHT/3;
-	uint16_t prev_x = 0, prev_y = DISP_HEIGHT / 2;
+	const uint16_t half_amp = DISP_HEIGHT/4;
+	uint16_t prev_x = 0, prev_y = 2*DISP_HEIGHT / 3;
 
+	uint16_t red = 0xf81c;
+	uint16_t blue = 0x0dff;
+	uint16_t green = 0x0f6f;
+
+	prev_x = 0;
+	prev_y = 2*DISP_HEIGHT / 3;
 	for (uint16_t x = 0; x < DISP_WIDTH; x += 4) {
-		uint16_t y = (uint16_t)((sin(10 * 2 * PI * x / DISP_WIDTH) + sin(3 * 2 * PI * x / DISP_WIDTH))/2 * half_amp + DISP_HEIGHT/2);
-		disp_draw_line(prev_x, prev_y, x, y, 4, 0x03bf);
+		uint16_t y = (uint16_t)((sin(10 * 2 * PI * x / DISP_WIDTH) + sin(3 * 2 * PI * x / DISP_WIDTH))/2 * half_amp + 2*DISP_HEIGHT/3);
+		disp_draw_line(prev_x, prev_y, x, y, 4, blue);
 		prev_x = x;
 		prev_y = y;
 	}
-	//disp_print("Arjun is very cool", 10, 10, 4, 0x03bf, 0xffff);
-	//disp_draw_line(125, 300, 10, 15, 2, RED);
+	prev_x = 0;
+	prev_y = 2*DISP_HEIGHT / 3;
+	for (uint16_t x = 0; x < DISP_WIDTH; x += 4) {
+		uint16_t y = (uint16_t)((sin(7 * 2 * PI * x / DISP_WIDTH) + sin(4 * 2 * PI * x / DISP_WIDTH))/2 * half_amp + 2*DISP_HEIGHT/3);
+		disp_draw_line(prev_x, prev_y, x, y, 4, red); // Red
+		prev_x = x;
+		prev_y = y;
+	}
+
+	disp_print("Roll Over Beethoven", 20, 40, 4, green, BLACK);
 
 }
 
@@ -266,12 +279,24 @@ void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uin
 	disp_write(HX8357_CASET, x_win, 4);
 	disp_write(HX8357_PASET, y_win, 4);
 
+	uint8_t buf[DMA_BUF_SIZE];
+
 	// Write color
 	color = htons(color);
+	int total_bytes = height * width * 2;
+	int buf_fill_len = (total_bytes > DMA_BUF_SIZE) ? DMA_BUF_SIZE : total_bytes;
+
+	for (int i = 0; i < buf_fill_len; i += 2) {
+		*((uint16_t *) (buf + i)) = color;
+	}
+
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 0);
 	disp_write_cmd(HX8357_RAMWR);
-	for (int i = 0; i < height * width; i++) {
-		disp_write_data(&color, 2);
+
+	while (total_bytes > 0) {
+		uint16_t write_count = total_bytes > DMA_BUF_SIZE ? DMA_BUF_SIZE : total_bytes;
+		disp_write_data(&buf, write_count);
+		total_bytes -= write_count;
 	}
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
 }
@@ -279,7 +304,6 @@ void disp_fill_rect(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uin
 void disp_draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t size, uint16_t color)
 {
 	// Check inputs
-
 	if (x2 >= DISP_WIDTH || y2 >= DISP_HEIGHT) {
 		return;
 	}
@@ -318,22 +342,6 @@ void disp_draw_line(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint8_t 
 			y1 += sy;
 		}
 	}
-/*
-	for (int x = x1; x <= x2; x++) {
-		// Place point reordered if ygx
-		if (ygx) {
-			disp_fill_rect(y, x, size, size, color);
-		} else {
-			disp_fill_rect(x, y, size, size, color);
-		}
-		// Update D and y
-		if (D > 0) {
-			y++;
-			D -= 2*dx;
-		}
-		D += 2*dy;
-	}
-	*/
 
 }
 
@@ -391,4 +399,9 @@ void disp_write(uint8_t cmd, const void *data, int len)
 
 	// Set SS to high
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, 1);
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+	dma_busy = 0;
 }

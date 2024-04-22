@@ -3,6 +3,20 @@
 
 #include <stdint.h>
 
+#define LANDSCAPE
+
+#ifdef LANDSCAPE
+#define DISP_HEIGHT HX8357_WIDTH
+#define DISP_WIDTH HX8357_HEIGHT
+#else
+#define DISP_HEIGHT HX8357_HEIGHT
+#define DISP_WIDTH HX8357_WIDTH
+#endif
+
+#define CHAR_HEIGHT 7
+#define CHAR_WIDTH 5
+#define CHAR_PADDING 1
+
 // From Adafruit Library
 #define HX8357_WIDTH              320
 #define HX8357_HEIGHT             480

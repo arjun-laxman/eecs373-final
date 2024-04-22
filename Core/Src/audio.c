@@ -2,6 +2,7 @@
 #include <string.h>
 #include <math.h>
 #include "stm32l4xx_hal.h"
+#include "display.h"
 #include "audio.h"
 
 #define LUT_SIZE 256
@@ -60,6 +61,20 @@ void fill_sin_lut()
 	}
 }
 
+const char *keys[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B "};
+
+// disp_print(char *s, uint16_t x, uint16_t y, uint8_t size, uint16_t fg, uint16_t bg);
+
+void print_note(int note_idx){
+
+	int mod = note_idx % 12;
+	const uint16_t size = 10;
+	const uint16_t x = (DISP_WIDTH - (2*CHAR_WIDTH + CHAR_PADDING) * size)/2;
+	const uint16_t y = (DISP_HEIGHT - CHAR_HEIGHT * size)/2;
+	disp_print(keys[mod], x, y, size, 0xa839, 0x0000);
+
+}
+
 // TODO: scale amplitude depending on frequency
 void add_note(int note_idx, float note_amp)
 {
@@ -89,8 +104,9 @@ void add_note(int note_idx, float note_amp)
 	} else {
 		ctx.amps[existing_note_idx] = scaled_amp;
 	}
-}
 
+	print_note(note_idx);
+}
 
 void set_damp_factor(int note, int high)
 {
@@ -98,8 +114,7 @@ void set_damp_factor(int note, int high)
 		if (note == ctx.notes[i]) {
 			if (high) {
 				ctx.damp_factor |= (1 << i);
-			}
-			else {
+			} else {
 				// Low
 				ctx.damp_factor &= ~(1 << i);
 			}
