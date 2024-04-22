@@ -59,10 +59,12 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
-volatile uint8_t touch_status;
+volatile uint8_t touch_status; // has an unserviced touch been detected
 volatile uint16_t intr_addr;
-volatile uint8_t  octave_no;
-volatile uint8_t sustain;
+volatile uint8_t  octave_no; // which octave was the key pressed in -> 0 to 4
+volatile uint8_t sustain; // sustain button pressed
+volatile uint8_t mode; // has a request to change mode been sent
+volatile uint8_t chmod; // set to 1 whenever blue button pressed
 uint16_t l_pressure = 0, r_pressure = 0;
 /* USER CODE END PV */
 
@@ -173,17 +175,21 @@ int main(void)
 					  else{
 						  pressure = 0.7;
 					  }
-					  add_note(octave_A + 12 + i, (uint16_t)(pressure));
+					  add_note(octave_A + i, (uint16_t)(pressure));
 				  } else {
 					  // Remove finger
-					  set_damp_factor(octave_A +12 + i, 1);
+					  set_damp_factor(octave_A + i, 1);
 				  }
 			  }
 		  }
 		  prev_touch_value = touch_value;
 	  }
 	  sustain = !HAL_GPIO_ReadPin(GPIOG, GPIO_PIN_0);
-
+	  change_butt = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
+	  if (change_butt) {
+		  mode = (mode + 1) % NUM_MODES;
+		  init_audio_ctx();
+	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
