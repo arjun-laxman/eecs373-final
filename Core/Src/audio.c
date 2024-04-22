@@ -2,29 +2,35 @@
 #include <string.h>
 #include <math.h>
 #include "stm32l4xx_hal.h"
-#include "display.h"
 #include "audio.h"
 
 #define LUT_SIZE 256
 #define INIT_AMP 0.5
 #define DEAD_THRESHOLD 0.0001
-#define NUM_HARM 4
+#define NUM_HARM 6
+
 #define PRESCALER 1
 #define BASE_CLK 120000000
 #define LOWEST_FREQ 55
 
 #define PI 3.14159265
-#define HIGH_DAMP_FACTOR 0.99
+#define HIGH_DAMP_FACTOR 0.95
 #define LOW_DAMP_FACTOR 0.999
 #define ATTACK_FACTOR 0.2
 
-#define AMP_UPDATE_INTR_COUNT 20
-
+#define AMP_UPDATE_INTR_COUNT 50
 
 static float freqs[48];
 static audio_ctx_t ctx;
 static int sin_lut[LUT_SIZE];
-static const float harmonic_amps[NUM_HARM] = {1, 0.4, 0.6, 0.15};
+
+static const float  haramonic_piano[NUM_HARM] = {1, 0.4, 0.2, 0.1, 0.6, 0.15};
+static const float  haramonic_flute[NUM_HARM] = {1, 0, 0, 0, 0, 0};
+static const float  haramonic_misc[NUM_HARM] = {0.75, 0.2, 0.2, 0.2, 0.2, 0.2};
+static const float  haramonic_nada[NUM_HARM] = {0.8, 0.6, 0.4, 0.2, 0.1, 0};
+
+static const float* harmonic_amps[NUM_MODES] = {haramonic_piano, haramonic_flute, haramonic_misc, haramonic_nada};
+
 static int intr_freq;
 
 static int amp_update_counter;
@@ -32,6 +38,8 @@ static int amp_update_counter;
 extern DAC_HandleTypeDef hdac1;
 extern TIM_HandleTypeDef htim4;
 extern uint8_t sustain;
+extern uint8_t chmod;
+extern uint8_t mode;
 
 void fill_freqs()
 {
@@ -46,16 +54,18 @@ void fill_freqs()
 
 void fill_sin_lut()
 {
+	float* temp_haram = *harmonic_amps + mode;
 	float harm_amp_sum = 0;
 	for (int i = 0; i < NUM_HARM; i++) {
-		harm_amp_sum += harmonic_amps[i];
+		harm_amp_sum += temp_haram[i];
 	}
 
 	// creates a sine wave look up table centered at VREF/2
 	for(uint16_t i = 0; i < LUT_SIZE; ++i) {
 		sin_lut[i] = 0;
 		for (int j = 0; j < NUM_HARM; j++) {
-			sin_lut[i] += (int) (sin((double) 2 * PI * i * (j+1) / LUT_SIZE) * 2047 * harmonic_amps[j]);
+//			sin_lut[i] += (int) (sin((double) 2 * PI * i * (j+1) / LUT_SIZE) * 2047 * harmonic_amps[j]);
+			sin_lut[i] += (int) (sin((double) 2 * PI * i * (3*j/4 +1) / LUT_SIZE) * 2047 * (temp_haram[j]));
 		}
 		sin_lut[i] /= harm_amp_sum;
 	}
@@ -65,7 +75,7 @@ const char *keys[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A
 
 // disp_print(char *s, uint16_t x, uint16_t y, uint8_t size, uint16_t fg, uint16_t bg);
 
-void print_note(int note_idx){
+static void print_note(int note_idx){
 
 	int mod = note_idx % 12;
 	const uint16_t size = 10;
@@ -103,10 +113,11 @@ void add_note(int note_idx, float note_amp)
 		ctx.num_notes++;
 	} else {
 		ctx.amps[existing_note_idx] = scaled_amp;
+		ctx.damp_factor &= ~(1 << existing_note_idx);
 	}
-
 	print_note(note_idx);
 }
+
 
 void set_damp_factor(int note, int high)
 {
@@ -114,7 +125,8 @@ void set_damp_factor(int note, int high)
 		if (note == ctx.notes[i]) {
 			if (high) {
 				ctx.damp_factor |= (1 << i);
-			} else {
+			}
+			else {
 				// Low
 				ctx.damp_factor &= ~(1 << i);
 			}
@@ -146,6 +158,7 @@ void update_amps()
 			ctx.num_notes--;
 		}
 	}
+
 }
 
 void init_audio_ctx()
