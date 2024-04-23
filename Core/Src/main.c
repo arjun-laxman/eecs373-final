@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "audio.h"
 #include "mpr121.h"
+#include "display.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -66,6 +67,7 @@ volatile uint8_t sustain; // sustain button pressed
 volatile uint8_t mode; // has a request to change mode been sent
 volatile uint8_t chmod; // set to 1 whenever blue button pressed
 uint16_t l_pressure = 0, r_pressure = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -120,13 +122,12 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
-/*
-  for (uint8_t addr = 0x5A; addr <= 0x5B; addr++) {
+  for (uint8_t addr = 0x5A; addr <= 0x5D; addr++) {
   	  if (mpr121_init(addr) != 0) {
   		  // TBD: ERROR
   	  }
   }
-  */
+
   // resetting touch status
   touch_status = 0;
 
@@ -144,10 +145,19 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t change_butt;
   uint16_t touch_value;
   uint16_t prev_touch_value;
   sustain = 0;
+  mode = 0;
 
+
+  while(!touch_status){ /// stay here until a key is pressed
+	 volatile int wait = 1;
+  }
+
+  disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
+  print_mode();
 //  octave_no = 1;
   while (1)
   {
@@ -165,17 +175,17 @@ int main(void)
 			  if (mask & changes) {
 				  if (mask & touch_value) { // if note i in octave was pressed
 
-					  uint16_t pressure = 0;
-					  if(octave_A + i < 24) {
-						  pressure = (l_pressure < 0.1) ? 0.7 : l_pressure;
+					  float pressure = 0;
+					  if(octave_A + i < 24 && l_pressure >= 0.1) {
+						  pressure = l_pressure;
 					  }
-					  else if (octave_A + i >= 24) {
-						  pressure = (r_pressure < 0.1) ? 0.7 : r_pressure;
+					  else if (octave_A + i >= 24 && r_pressure >= 0.1) {
+						  pressure = r_pressure;
 					  }
 					  else{
 						  pressure = 0.7;
 					  }
-					  add_note(octave_A + i, (uint16_t)(pressure));
+					  add_note(octave_A + i,pressure);
 				  } else {
 					  // Remove finger
 					  set_damp_factor(octave_A + i, 1);
@@ -189,6 +199,11 @@ int main(void)
 	  if (change_butt) {
 		  mode = (mode + 1) % NUM_MODES;
 		  init_audio_ctx();
+		  print_mode();
+	  }
+
+	  if(sustain && change_butt){
+		  tutorial_mode();
 	  }
     /* USER CODE END WHILE */
 
@@ -524,6 +539,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PF0 PF1 PF2 */
   GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2;

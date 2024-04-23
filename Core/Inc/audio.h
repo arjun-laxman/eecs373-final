@@ -4,7 +4,7 @@
 #define AUDIO_H
 
 #define MAX_NOTES 16
-
+#define NUM_MODES 4
 
 typedef struct audio_ctx_s {
 	int num_notes;
@@ -45,5 +45,7 @@ void update_amps();
 void init_timer();
 
 void audio_tim_isr();
+
+void print_mode();
 
 #endif

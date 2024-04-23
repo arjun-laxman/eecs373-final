@@ -254,6 +254,8 @@ int disp_init()
 
 	disp_print("Roll Over Beethoven", 20, 40, 4, green, BLACK);
 
+
+
 }
 
 inline void disp_set_pixel(uint16_t x, uint16_t y, uint16_t color)
@@ -405,3 +407,5 @@ void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	dma_busy = 0;
 }
+
+

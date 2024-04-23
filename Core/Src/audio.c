@@ -3,6 +3,7 @@
 #include <math.h>
 #include "stm32l4xx_hal.h"
 #include "audio.h"
+#include "display.h"
 
 #define LUT_SIZE 256
 #define INIT_AMP 0.5
@@ -75,7 +76,8 @@ const char *keys[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A
 
 // disp_print(char *s, uint16_t x, uint16_t y, uint8_t size, uint16_t fg, uint16_t bg);
 
-static void print_note(int note_idx){
+static void print_note(int note_idx)
+{
 
 	int mod = note_idx % 12;
 	const uint16_t size = 10;
@@ -84,6 +86,33 @@ static void print_note(int note_idx){
 	disp_print(keys[mod], x, y, size, 0xa839, 0x0000);
 
 }
+
+const char *modes[NUM_MODES] = {"Piano", "Flute", "Guitar", "Electric"};
+
+void print_mode()
+{
+	const uint16_t size = NUM_MODES;
+	const uint16_t x = (DISP_WIDTH -150);
+	const uint16_t y = (DISP_HEIGHT - 100);
+	disp_print(modes[mode], x, y, size, 0xa839, 0x0000);
+}
+
+//const char* hail_to_victors[20] = {"A", "B", "C", "D", "E", "A", "B", "C", "D", "E", "A", "B", "C", "D", "E", "A", "B", "C", "D", "E"};
+//
+//void tutorial_mode(int note_idx){
+//
+//	  disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
+//
+//	  const uint16_t x = (DISP_WIDTH -150);
+//	  const uint16_t y = (DISP_HEIGHT - 100);
+//	  disp_print("Tutorial", x, y, size, 0xa839, 0x0000);
+//
+//	  int mistakes = 0;
+//
+//	  for(int i = 0; i < 20; i++) {
+//		  char note_to_be_played = hail_to_the_victors[i];
+//	  }
+//}
 
 // TODO: scale amplitude depending on frequency
 void add_note(int note_idx, float note_amp)
