@@ -124,12 +124,12 @@ int main(void)
   MX_SPI1_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
-
-  for (uint8_t addr = 0x5A; addr <= 0x5D; addr++) {
-  	  if (mpr121_init(addr) != 0) {
-  		  // TBD: ERROR
-  	  }
-  }
+//
+//  for (uint8_t addr = 0x5A; addr <= 0x5D; addr++) {
+//  	  if (mpr121_init(addr) != 0) {
+//  		  // TBD: ERROR
+//  	  }
+//  }
 
   // resetting touch status
   touch_status = 0;

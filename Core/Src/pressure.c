@@ -30,28 +30,21 @@ static inline uint16_t nread16(uint8_t *p)
 
 void pressure_read_start()
 {
-	HAL_UART_Receive_IT(&huart3, ibuf, 28);
+	HAL_UART_Receive_IT(&huart3, ibuf, 32);
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	uint8_t *frame = 0;
-	uint8_t *buf = ibuf;
 
-	if(buf[0] != 0x7E){
+	if(ibuf[0] != 0x7E){
 		goto exit;
 	}
-
-	if(frame == 0){
-		goto exit;
-	}
-
-	uint64_t addr_lsb = frame[11];
+	uint64_t addr_lsb = ibuf[11];
 
 	best_index = -1;
 	uint16_t max_pressure = 0;
 	for (int i = 0; i < 5; i++){
-		uint16_t pressure = 0x3ff - nread16(frame + 17 + 2 * i);
+		uint16_t pressure = 0x3ff - nread16(ibuf + 17 + 2 * i);
 		if (pressure > max_pressure && pressure != 0x00){
 			best_index = i;
 			max_pressure = pressure;
@@ -61,7 +54,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 
 exit:
-	frame[0] = 0;
 	pressure_read_start();
 }
 
