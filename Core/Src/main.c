@@ -66,6 +66,9 @@ volatile uint8_t  octave_no; // which octave was the key pressed in -> 0 to 4
 volatile uint8_t sustain; // sustain button pressed
 volatile uint8_t mode; // has a request to change mode been sent
 volatile uint8_t chmod; // set to 1 whenever blue button pressed
+volatile uint8_t tutorial_mode; // set to 1 when in tutorial mode
+volatile int best_index;
+volatile int pressure_wait;
 uint16_t l_pressure = 0, r_pressure = 0;
 
 /* USER CODE END PV */
@@ -150,15 +153,23 @@ int main(void)
   uint16_t prev_touch_value;
   sustain = 0;
   mode = 0;
+  tutorial_mode = 0;
 
-
-  while(!touch_status){ /// stay here until a key is pressed
-	 volatile int wait = 1;
-  }
-
+  HAL_Delay(2000);
   disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
   print_mode();
-//  octave_no = 1;
+  disp_print("Press any key to start", 40, CORR_Y, 3, 0x0f6f, 0x0000);
+  while(!touch_status){ /// stay here until a key is pressed
+	  change_butt = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
+	  if (change_butt) {
+		  mode = (mode + 1) % NUM_MODES;
+		  init_audio_ctx();
+		  print_mode();
+	  }
+  }
+
+  disp_print("Press any key to start", 40, CORR_Y, 3, 0x0000, 0x0000);
+
   while (1)
   {
 	  if (touch_status) { // touch status set to 1 by ISR
@@ -167,7 +178,6 @@ int main(void)
 		  uint16_t changes = touch_value ^ prev_touch_value;
 
 		  if (octave_no == 4) {
-//			  touch_value = 0; // invalid touch
 		  }
 		  uint8_t octave_A = (octave_no * 12); // A note idx for octave
 		  for (int i = 0; i < 12; i++) {
@@ -203,7 +213,10 @@ int main(void)
 	  }
 
 	  if(sustain && change_butt){
-		  tutorial_mode();
+		  const uint16_t x = (DISP_WIDTH -150);
+		  const uint16_t y = (DISP_HEIGHT - 100);
+		  tut_init_display();
+		  tutorial_mode = 1;
 	  }
     /* USER CODE END WHILE */
 

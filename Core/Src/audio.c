@@ -12,11 +12,11 @@
 
 #define PRESCALER 1
 #define BASE_CLK 120000000
-#define LOWEST_FREQ 55
+#define LOWEST_FREQ 65.41
 
 #define PI 3.14159265
 #define HIGH_DAMP_FACTOR 0.95
-#define LOW_DAMP_FACTOR 0.999
+#define LOW_DAMP_FACTOR 0.9992
 #define ATTACK_FACTOR 0.2
 
 #define AMP_UPDATE_INTR_COUNT 50
@@ -36,11 +36,24 @@ static int intr_freq;
 
 static int amp_update_counter;
 
+/* TUTORIAL MODE VARS*/
+
+static uint8_t tutorial_index;
+static const char* correct_tut_notes[NUM_TUT_NOTES] = {"E ", "C ", "D ", "E ", "C ", "D ", "E ", "F ",
+												"D ", "E ", "F ", "D ", "E ", "F ", "G ", "A ", "F ",
+												"E ", "F ", "C ", "D ", "E ", "G ", "E ", "D ", "C "};
+//static uint8_t correct_tut_notes[NUM_TUT_NOTES] = {3, 1, 2, 3, 1, 2, 3, 3,
+//												1, 2, 3, 1, 2, 3, 2, 3,
+//												1, 2, 3, 1, 1, 2, 3, 3, 2, 1};
+
 extern DAC_HandleTypeDef hdac1;
 extern TIM_HandleTypeDef htim4;
 extern uint8_t sustain;
 extern uint8_t chmod;
 extern uint8_t mode;
+extern tutorial_mode;
+extern best_index;
+extern pressure_wait;
 
 void fill_freqs()
 {
@@ -87,32 +100,19 @@ static void print_note(int note_idx)
 
 }
 
-const char *modes[NUM_MODES] = {"Piano", "Flute", "Guitar", "Electric"};
+const char *modes[NUM_MODES] = {"Piano", "Alt Sax", "Bright", "Electric"};
 
 void print_mode()
 {
+	uint8_t mode_to_clear = (mode == 0) ? 3 : mode - 1;
+
 	const uint16_t size = NUM_MODES;
-	const uint16_t x = (DISP_WIDTH -150);
-	const uint16_t y = (DISP_HEIGHT - 100);
+	const uint16_t x = (DISP_WIDTH -180);
+	const uint16_t y = (DISP_HEIGHT - 60);
+	disp_print(modes[mode_to_clear], x, y, size, 0x0000, 0x0000);
+	disp_print(modes[mode], x, y, size, 0x0000, 0x0000);
 	disp_print(modes[mode], x, y, size, 0xa839, 0x0000);
 }
-
-//const char* hail_to_victors[20] = {"A", "B", "C", "D", "E", "A", "B", "C", "D", "E", "A", "B", "C", "D", "E", "A", "B", "C", "D", "E"};
-//
-//void tutorial_mode(int note_idx){
-//
-//	  disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
-//
-//	  const uint16_t x = (DISP_WIDTH -150);
-//	  const uint16_t y = (DISP_HEIGHT - 100);
-//	  disp_print("Tutorial", x, y, size, 0xa839, 0x0000);
-//
-//	  int mistakes = 0;
-//
-//	  for(int i = 0; i < 20; i++) {
-//		  char note_to_be_played = hail_to_the_victors[i];
-//	  }
-//}
 
 // TODO: scale amplitude depending on frequency
 void add_note(int note_idx, float note_amp)
@@ -121,7 +121,7 @@ void add_note(int note_idx, float note_amp)
 		// ERROR or remove lowest amp note??
 		return;
 	}
-//	float scaled_amp = note_amp + 0.2*((47-note_idx)/48);
+
 	float scaled_amp = note_amp;
 	uint8_t note_exists = 0;
 	uint8_t existing_note_idx = MAX_NOTES + 1;
@@ -144,9 +144,14 @@ void add_note(int note_idx, float note_amp)
 		ctx.amps[existing_note_idx] = scaled_amp;
 		ctx.damp_factor &= ~(1 << existing_note_idx);
 	}
-	print_note(note_idx);
-}
+	// if in tutorial mode ? check for whether note is correct : nothinbg
+	if (!tutorial_mode) {
+		print_note(note_idx);
+	} else {
+		tutorial_check_note(note_idx);
+	}
 
+}
 
 void set_damp_factor(int note, int high)
 {
@@ -196,6 +201,7 @@ void init_audio_ctx()
 	fill_sin_lut();
 	memset(&ctx, 0, sizeof(ctx));
 	amp_update_counter = 0;
+	tutorial_index = 0;
 }
 
 void audio_tim_isr()
@@ -234,3 +240,108 @@ void init_timer(TIM_HandleTypeDef *htim)
 	HAL_TIM_Base_Init(&htim4);
 	HAL_TIM_Base_Start_IT(&htim4);
 }
+
+
+/* TUTORIAL MODE CODE*/
+
+void tutorial_check_note(uint8_t note_idx)
+{
+	// have current tutorial index
+	// when note correctly played, increment tutorial index
+	// else handle incorrect note actions
+	uint8_t size = 10;
+	uint8_t tut_c_x = (DISP_WIDTH - (2*CHAR_WIDTH + CHAR_PADDING) * size)/2;
+	uint8_t tut_c_y = (DISP_HEIGHT - CHAR_HEIGHT * size)/4;
+	disp_print(correct_tut_notes[tutorial_index], CORR_X, CORR_Y, size, 0xf01d, 0x0000);
+	HAL_Delay(500);
+	if (is_note_correct(note_idx)) {
+		handle_note_correct(note_idx);
+	} else {
+		handle_note_incorrect(note_idx);
+	}
+}
+
+uint8_t is_note_correct(uint8_t note_idx)
+{
+	uint8_t mod = note_idx%12;
+	if (keys[mod] == correct_tut_notes[tutorial_index]) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+const char* fingers[5] = {"Little", "Ring", "Middle", "Pointer", "Thumb"};
+static uint8_t fingers_cnt[5] = {0,0,0,0,0};
+
+void handle_note_correct(uint8_t note_idx)
+{
+	// display note in green
+	// increment tutorial note index
+	int mod = note_idx % 12;
+	uint8_t size = 10;
+	uint8_t tut_c_x = (DISP_WIDTH - (2*CHAR_WIDTH + CHAR_PADDING) * size)/2;
+	uint8_t tut_c_y = 3*(DISP_HEIGHT - CHAR_HEIGHT * size)/4;
+	disp_print(keys[mod], tut_c_x, tut_c_y, size, 0x07e0, 0x0000);
+
+	if (tutorial_index >= NUM_TUT_NOTES) {
+		tutorial_mode = 0;
+		tutorial_index = 0;
+		disp_print(keys[mod], tut_c_x, tut_c_y, size, 0x0000, 0x0000);
+		disp_print(correct_tut_notes[tutorial_index], CORR_X, CORR_Y, size, 0x0000, 0x0000);
+		disp_print("Good Stuff Boss", 10, tut_c_y/2, 5, 0x0f6f, 0x0000);
+		disp_print("Tutorial", TUT_X, TUT_Y, 4, 0x0000, 0x0000);
+		HAL_Delay(3000);
+		disp_print("Good Stuff Boss", 10, tut_c_y/2, 5, 0x0000, 0x0000);
+		disp_print("Fingers Pressed", 10, tut_c_y/2 - 40, 5, 0x0f6f, 0x0000);
+		for (int i = 0; i < 5; i++) {
+			if (fingers_cnt[i] > 0) {
+				disp_print(fingers[i], 10, tut_c_y/2, 5, 0x0f6f, 0x0000);
+				HAL_Delay(1000);
+				disp_print(fingers[i], 10, tut_c_y/2, 5, 0x0000, 0x0000);
+			}
+		}
+		memset(fingers_cnt, 5, 0);
+	}
+	else {
+		tutorial_index++;
+		HAL_Delay(500);
+		disp_print(keys[mod], tut_c_x, tut_c_y, size, 0x0000, 0x0000);
+		disp_print(correct_tut_notes[tutorial_index], CORR_X, CORR_Y, size, 0xf01d, 0x0000);
+
+		if(best_index != -1){
+			fingers_cnt[best_index]++;
+			pressure_wait = 1;
+//			while(pressure_wait);
+//			disp_print(fingers[best_index], DISP_HEIGHT -10, 2, 5, 0x0f6f, 0x0000);
+			best_index = -1;
+		}
+	}
+}
+
+void handle_note_incorrect(uint8_t note_idx)
+{
+	// display note in red
+	int mod = note_idx % 12;
+	uint8_t size = 10;
+	uint8_t tut_c_x = (DISP_WIDTH - (2*CHAR_WIDTH + CHAR_PADDING) * size)/2;
+	uint8_t tut_c_y = 3*(DISP_HEIGHT - CHAR_HEIGHT * size)/4 ;
+	disp_print(keys[mod], tut_c_x, tut_c_y, size, 0xd141, 0x0000);
+	HAL_Delay(1000);
+	disp_print(keys[mod], tut_c_x, tut_c_y, size, 0x0000, 0x0000);
+}
+void tut_init_display() {
+	disp_fill_rect(0, 0, DISP_WIDTH, DISP_HEIGHT, BLACK);
+	disp_print("Tutorial", TUT_X, TUT_Y, 4, 0xf81c, 0x0000);
+	disp_print("Hail To The Victors", TUT_X, TUT_Y+40, 4, 0xffc0, 0x0000);
+	HAL_Delay(2000);
+	disp_print("Hail To The Victors", TUT_X, TUT_Y+40, 4, 0x0000, 0x0000);
+	disp_print("Follow the notes on", TUT_X, TUT_Y+50, 4, 0xffc0, 0x0000);
+	disp_print("the screen", TUT_X, TUT_Y+90, 4, 0xffc0, 0x0000);
+	HAL_Delay(2000);
+	disp_print("Follow the notes on", TUT_X, TUT_Y+50, 4, 0x0000, 0x0000);
+	disp_print("the screen", TUT_X, TUT_Y+90, 4, 0x0000, 0x0000);
+	disp_print(correct_tut_notes[tutorial_index], CORR_X, CORR_Y, 10, 0xf01d, 0x0000);
+}
+
+

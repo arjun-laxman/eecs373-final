@@ -1,10 +1,19 @@
 #include <stdint.h>
+#include "display.h"
 
 #ifndef AUDIO_H
 #define AUDIO_H
 
-#define MAX_NOTES 16
+#define MAX_NOTES 48
 #define NUM_MODES 4
+
+#define NUM_TUT_NOTES 3
+
+#define TUT_X 5
+#define TUT_Y 10
+
+#define CORR_X (DISP_WIDTH - (2*CHAR_WIDTH + CHAR_PADDING) * 10)/2
+#define CORR_Y (DISP_HEIGHT - CHAR_HEIGHT * 10)/4
 
 typedef struct audio_ctx_s {
 	int num_notes;
@@ -47,5 +56,15 @@ void init_timer();
 void audio_tim_isr();
 
 void print_mode();
+
+void tutorial_check_note(uint8_t note_idx);
+
+void handle_note_correct(uint8_t note_idx);
+
+void handle_note_incorrect(uint8_t note_idx);
+
+uint8_t is_note_correct(uint8_t note_idx);
+
+void tut_init_display();
 
 #endif
